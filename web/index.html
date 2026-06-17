@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free Agent Finder</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;600&display=swap" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #16171a;
+      --border: #2a2b30;
+      --accent: #f97316;
+      --accent-dim: #7c3a0a;
+      --text: #e8e9ec;
+      --text-dim: #6b6e7a;
+      --radius: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Sans", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      padding: 24px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    header .logo {
+      font-family: "DM Serif Display", serif;
+      font-size: 1.1rem;
+      font-style: italic;
+      letter-spacing: 0.01em;
+      color: var(--accent);
+    }
+
+    #hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px 40px;
+      width: 100%;
+      max-width: 680px;
+      text-align: center;
+      transition: padding 0.5s ease;
+    }
+    #hero.compact { padding: 24px 20px 16px; }
+
+    #hero h1 {
+      font-family: "DM Serif Display", serif;
+      font-size: 2.6rem;
+      font-weight: 400;
+      font-style: italic;
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+      margin-bottom: 12px;
+      transition: font-size 0.4s ease, opacity 0.4s ease;
+    }
+    #hero.compact h1 { font-size: 1.4rem; }
+
+    #hero p.subtitle {
+      color: var(--text-dim);
+      font-size: 1rem;
+      margin-bottom: 32px;
+      transition: opacity 0.4s ease, max-height 0.4s ease;
+      max-height: 60px;
+      overflow: hidden;
+    }
+    #hero.compact p.subtitle { opacity: 0; max-height: 0; margin-bottom: 16px; }
+
+    .search-wrapper { position: relative; width: 100%; }
+    #search-input {
+      width: 100%;
+      padding: 16px 20px;
+      font-size: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #search-input:focus { border-color: var(--accent); }
+    #search-input::placeholder { color: var(--text-dim); }
+
+    #autocomplete {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0; right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      display: none;
+    }
+    .autocomplete-item {
+      padding: 12px 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: background 0.15s;
+    }
+    .autocomplete-item:hover, .autocomplete-item.active {
+      background: rgba(249,115,22,0.12);
+    }
+    .autocomplete-item img {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--border);
+    }
+    .autocomplete-item .name { font-size: 0.9rem; font-weight: 500; }
+    .autocomplete-item .team { font-size: 0.75rem; color: var(--text-dim); }
+
+    #controls {
+      display: none;
+      align-items: center;
+      gap: 24px;
+      margin-top: 20px;
+      width: 100%;
+      max-width: 680px;
+      padding: 0 0 8px;
+    }
+    #controls.visible { display: flex; }
+    #controls label { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; }
+    #n-slider { flex: 1; accent-color: var(--accent); cursor: pointer; }
+    #n-value { font-size: 0.85rem; font-weight: 700; color: var(--accent); min-width: 20px; text-align: right; }
+
+    #viz-container { width: 100%; max-width: 900px; position: relative; }
+    #viz svg { width: 100%; display: block; }
+
+    .player-node { cursor: pointer; }
+    .player-node:hover image { filter: brightness(1.15) drop-shadow(0 0 12px rgba(249,115,22,0.7)); }
+    .player-node .ring {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 2.5;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .player-node.center .ring { opacity: 1; }
+    .player-node .name-label { fill: var(--text); font-size: 11px; font-weight: 600; text-anchor: middle; pointer-events: none; }
+    .player-node .team-label { fill: var(--text-dim); font-size: 10px; text-anchor: middle; pointer-events: none; }
+    .orbit-line { stroke: var(--border); stroke-width: 1; fill: none; stroke-dasharray: 4 4; opacity: 0.4; }
+    .comp-edge { stroke: var(--accent-dim); stroke-width: 1; opacity: 0; }
+
+    #stats-card {
+      display: none;
+      width: 100%;
+      max-width: 900px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      margin: 0 auto 40px;
+    }
+    #stats-card.visible { display: block; }
+    #stats-card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; color: var(--text); }
+    #stats-card h2 span { color: var(--accent); }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
+    .stat-cell { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; text-align: center; }
+    .stat-cell .val { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+    .stat-cell .lbl { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+    #status { font-size: 0.85rem; color: var(--text-dim); margin-top: 12px; min-height: 20px; text-align: center; }
+    #status.error { color: #e05a5a; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">Free Agent Finder</span>
+</header>
+
+<div id="hero">
+  <h1>Find Your Player's<br/>Archetype Match</h1>
+  <p class="subtitle">Type any NBA player's name to discover who plays like them.</p>
+  <div class="search-wrapper">
+    <input id="search-input" type="text" placeholder="Search player name…" autocomplete="off" />
+    <div id="autocomplete"></div>
+  </div>
+</div>
+
+<div id="controls">
+  <label for="n-slider">Comps</label>
+  <input id="n-slider" type="range" min="3" max="12" value="6" step="1" />
+  <span id="n-value">6</span>
+</div>
+
+<div id="status"></div>
+<div id="viz-container"></div>
+<div id="stats-card"></div>
+
+<script>
+const API = "http://localhost:8000";
+const HEADSHOT = id => `https://cdn.nba.com/headshots/nba/latest/1040x760/${id}.png`;
+
+let currentPlayer = null;
+let nComps = 6;
+let debounceTimer = null;
+let acItems = [];
+let acActive = -1;
+
+function setStatus(msg, isError = false) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = isError ? "error" : "";
+}
+
+const input = document.getElementById("search-input");
+const acBox = document.getElementById("autocomplete");
+
+input.addEventListener("input", () => {
+  clearTimeout(debounceTimer);
+  const q = input.value.trim();
+  if (q.length < 2) { acBox.style.display = "none"; return; }
+  debounceTimer = setTimeout(() => fetchAutocomplete(q), 200);
+});
+
+input.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown") { acActive = Math.min(acActive + 1, acItems.length - 1); renderAC(); }
+  else if (e.key === "ArrowUp") { acActive = Math.max(acActive - 1, 0); renderAC(); }
+  else if (e.key === "Enter") {
+    if (acActive >= 0 && acItems[acActive]) selectPlayer(acItems[acActive]);
+    else if (acItems.length > 0) selectPlayer(acItems[0]);
+  }
+  else if (e.key === "Escape") { acBox.style.display = "none"; }
+});
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".search-wrapper")) acBox.style.display = "none";
+});
+
+async function fetchAutocomplete(q) {
+  try {
+    const res = await fetch(`${API}/players/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    acItems = data.players || [];
+    acActive = -1;
+    renderAC();
+  } catch { acItems = []; acBox.style.display = "none"; }
+}
+
+function renderAC() {
+  if (acItems.length === 0) { acBox.style.display = "none"; return; }
+  acBox.innerHTML = acItems.map((p, i) => `
+    <div class="autocomplete-item ${i === acActive ? "active" : ""}" data-i="${i}">
+      <img src="${HEADSHOT(p.PLAYER_ID)}" onerror="this.src=''" />
+      <div>
+        <div class="name">${p.PLAYER_NAME}</div>
+        <div class="team">${p.TEAM_ABBREVIATION}</div>
+      </div>
+    </div>
+  `).join("");
+  acBox.style.display = "block";
+  acBox.querySelectorAll(".autocomplete-item").forEach(el => {
+    el.addEventListener("click", () => selectPlayer(acItems[+el.dataset.i]));
+  });
+}
+
+function selectPlayer(player) {
+  input.value = player.PLAYER_NAME;
+  acBox.style.display = "none";
+  currentPlayer = player;
+  fetchAndRender(player.PLAYER_NAME);
+}
+
+async function fetchAndRender(name) {
+  setStatus("Finding archetypes…");
+  document.getElementById("hero").classList.add("compact");
+  document.getElementById("controls").classList.add("visible");
+  try {
+    const res = await fetch(`${API}/comps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player: name, n: nComps }),
+    });
+    const data = await res.json();
+    if (data.error) { setStatus(data.error, true); return; }
+    setStatus("");
+    renderViz(currentPlayer, data.comps);
+  } catch {
+    setStatus("Could not reach API. Is it running on port 8000?", true);
+  }
+}
+
+function renderViz(center, comps) {
+  const container = document.getElementById("viz-container");
+  container.innerHTML = "";
+  const W = Math.min(container.clientWidth, 900);
+  const H = W * 0.75;
+  const cx = W / 2, cy = H / 2;
+  const orbitR = Math.min(W, H) * 0.33;
+  const centerR = 56, compR = 38;
+
+  const svg = d3.select("#viz-container").append("svg")
+    .attr("viewBox", `0 0 ${W} ${H}`)
+    .attr("preserveAspectRatio", "xMidYMid meet");
+
+  const defs = svg.append("defs");
+  function addClip(id, r) {
+    defs.append("clipPath").attr("id", id)
+      .append("circle").attr("r", r).attr("cx", 0).attr("cy", 0);
+  }
+  addClip("clip-center", centerR);
+  comps.forEach((_, i) => addClip(`clip-comp-${i}`, compR));
+
+  svg.append("circle").attr("class", "orbit-line").attr("cx", cx).attr("cy", cy).attr("r", orbitR);
+
+  comps.forEach((_, i) => {
+    const angle = (2 * Math.PI * i) / comps.length - Math.PI / 2;
+    const x = cx + orbitR * Math.cos(angle);
+    const y = cy + orbitR * Math.sin(angle);
+    svg.append("line").attr("class", "comp-edge")
+      .attr("x1", cx).attr("y1", cy).attr("x2", x).attr("y2", y)
+      .transition().delay(400 + i * 60).duration(400).attr("opacity", 0.35);
+  });
+
+  const centerNode = svg.append("g").attr("class", "player-node center")
+    .attr("transform", `translate(${cx},${cy})`).style("cursor", "default");
+  centerNode.append("circle").attr("class", "ring").attr("r", centerR + 6);
+  centerNode.append("image")
+    .attr("href", HEADSHOT(center.PLAYER_ID))
+    .attr("x", -centerR).attr("y", -centerR)
+    .attr("width", centerR * 2).attr("height", centerR * 2)
+    .attr("clip-path", "url(#clip-center)")
+    .attr("preserveAspectRatio", "xMidYMid slice")
+    .style("opacity", 0).transition().duration(500).style("opacity", 1);
+  centerNode.append("text").attr("class", "name-label").attr("y", centerR + 18).text(center.PLAYER_NAME);
+  centerNode.append("text").attr("class", "team-label").attr("y", centerR + 32).text(center.TEAM_ABBREVIATION || "");
+
+  comps.forEach((comp, i) => {
+    const angle = (2 * Math.PI * i) / comps.length - Math.PI / 2;
+    const x = cx + orbitR * Math.cos(angle);
+    const y = cy + orbitR * Math.sin(angle);
+
+    const node = svg.append("g").attr("class", "player-node")
+      .attr("transform", `translate(${cx},${cy})`).style("opacity", 0);
+    node.append("circle").attr("class", "ring").attr("r", compR + 5);
+    node.append("image")
+      .attr("href", HEADSHOT(comp.PLAYER_ID))
+      .attr("x", -compR).attr("y", -compR)
+      .attr("width", compR * 2).attr("height", compR * 2)
+      .attr("clip-path", `url(#clip-comp-${i})`)
+      .attr("preserveAspectRatio", "xMidYMid slice");
+    node.append("text").attr("class", "name-label").attr("y", compR + 16).text(comp.PLAYER_NAME);
+    node.append("text").attr("class", "team-label").attr("y", compR + 28).text(comp.TEAM_ABBREVIATION || "");
+
+    node.transition().delay(200 + i * 80).duration(600).ease(d3.easeCubicOut)
+      .attr("transform", `translate(${x},${y})`).style("opacity", 1);
+
+    node.on("click", () => {
+      currentPlayer = { PLAYER_ID: comp.PLAYER_ID, PLAYER_NAME: comp.PLAYER_NAME, TEAM_ABBREVIATION: comp.TEAM_ABBREVIATION };
+      input.value = comp.PLAYER_NAME;
+      fetchAndRender(comp.PLAYER_NAME);
+    });
+    node.on("mouseenter", function() {
+      d3.select(this).select(".ring").transition().duration(150).attr("opacity", 0.8);
+    }).on("mouseleave", function() {
+      d3.select(this).select(".ring").transition().duration(150).attr("opacity", 0);
+    });
+  });
+
+  renderStatsCard(center);
+}
+
+function renderStatsCard(center) {
+  const card = document.getElementById("stats-card");
+  const statKeys = [
+    { key: "PTS", label: "PTS" }, { key: "REB", label: "REB" },
+    { key: "AST", label: "AST" }, { key: "STL", label: "STL" },
+    { key: "BLK", label: "BLK" }, { key: "TS_PCT", label: "TS%" },
+    { key: "USG_PCT", label: "USG%" }, { key: "NET_RATING", label: "NET RTG" },
+  ];
+  fetch(`${API}/players`).then(r => r.json()).then(data => {
+    const player = data.players.find(p => p.PLAYER_ID === center.PLAYER_ID);
+    if (!player) return;
+    card.innerHTML = `
+      <h2>Top comps for <span>${center.PLAYER_NAME}</span></h2>
+      <div class="stats-grid">
+        ${statKeys.filter(s => player[s.key] != null).map(s => `
+          <div class="stat-cell">
+            <div class="val">${typeof player[s.key] === "number" && player[s.key] < 1
+              ? (player[s.key] * 100).toFixed(1) + "%" : player[s.key]}</div>
+            <div class="lbl">${s.label}</div>
+          </div>`).join("")}
+      </div>`;
+    card.classList.add("visible");
+  }).catch(() => {});
+}
+
+const slider = document.getElementById("n-slider");
+const nVal = document.getElementById("n-value");
+slider.addEventListener("input", () => {
+  nComps = +slider.value;
+  nVal.textContent = nComps;
+  if (currentPlayer) fetchAndRender(currentPlayer.PLAYER_NAME);
+});
+</script>
+</body>
+</html>

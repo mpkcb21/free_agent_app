@@ -25,7 +25,7 @@ Test:
 import os
 import sys
 import unicodedata
-
+from flask_cors import CORS
 from flask import Flask, jsonify, request
 
 
@@ -43,7 +43,7 @@ from knn_model import build_model, find_similar_players  # noqa: E402
 import pandas as pd  # noqa: E402
 
 app = Flask(__name__)
-
+CORS(app)
 # ---------------------------------------------------------------------------
 # State — loaded once on startup
 # ---------------------------------------------------------------------------
