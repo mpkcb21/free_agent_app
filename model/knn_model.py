@@ -10,8 +10,14 @@ Usage (standalone):
 
 import argparse
 import os
+import unicodedata
 
 import numpy as np
+
+
+def normalize(s: str) -> str:
+    """Strip accents and lowercase for fuzzy name matching."""
+    return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode().lower()
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
@@ -80,7 +86,7 @@ def find_similar_players(
     with their distance score and key stats.
     """
     # Find player (case-insensitive partial match)
-    mask = valid_df["PLAYER_NAME"].str.lower().str.contains(player_name.lower())
+    mask = valid_df["PLAYER_NAME"].apply(normalize).str.contains(normalize(player_name))
     matches = valid_df[mask]
 
     if matches.empty:
