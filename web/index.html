@@ -180,6 +180,26 @@
 
     #status { font-size: 0.85rem; color: var(--text-dim); margin-top: 12px; min-height: 20px; text-align: center; }
     #status.error { color: #e05a5a; }
+
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      display: none;
+      z-index: 1000;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      min-width: 180px;
+      max-width: 260px;
+    }
+    #tooltip .tt-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 2px; color: var(--text); }
+    #tooltip .tt-team { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 10px; }
+    #tooltip .tt-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    #tooltip .tt-stat { text-align: center; background: var(--bg); border-radius: 6px; padding: 6px 8px; }
+    #tooltip .tt-stat .val { font-size: 1rem; font-weight: 700; color: var(--accent); }
+    #tooltip .tt-stat .lbl { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -206,6 +226,11 @@
 <div id="status"></div>
 <div id="viz-container"></div>
 <div id="stats-card"></div>
+<div id="tooltip">
+  <div class="tt-name"></div>
+  <div class="tt-team"></div>
+  <div class="tt-stats"></div>
+</div>
 
 <script>
 const API = "http://localhost:8000";
@@ -216,6 +241,47 @@ let nComps = 6;
 let debounceTimer = null;
 let acItems = [];
 let acActive = -1;
+let allPlayersMap = {};
+
+const STAT_DEFS = [
+  { key: "AGE",                label: "Age",      fmt: v => v },
+  { key: "PTS",                label: "PTS",      fmt: v => v },
+  { key: "REB",                label: "REB",      fmt: v => v },
+  { key: "AST",                label: "AST",      fmt: v => v },
+  { key: "STL",                label: "STL",      fmt: v => v },
+  { key: "BLK",                label: "BLK",      fmt: v => v },
+  { key: "TS_PCT",             label: "TS%",      fmt: v => (v * 100).toFixed(1) + "%" },
+  { key: "USG_PCT",            label: "USG%",     fmt: v => (v * 100).toFixed(1) + "%" },
+  { key: "NET_RATING",         label: "Net Rtg",  fmt: v => v },
+  { key: "similarity_distance",label: "Sim Dist", fmt: v => v.toFixed(3) },
+];
+
+function showTooltip(playerData, event) {
+  const tt = document.getElementById("tooltip");
+  const stats = STAT_DEFS.filter(s => playerData[s.key] != null);
+  tt.querySelector(".tt-name").textContent = playerData.PLAYER_NAME || "";
+  tt.querySelector(".tt-team").textContent = playerData.TEAM_ABBREVIATION || "";
+  tt.querySelector(".tt-stats").innerHTML = stats.map(s =>
+    `<div class="tt-stat"><div class="val">${s.fmt(playerData[s.key])}</div><div class="lbl">${s.label}</div></div>`
+  ).join("");
+  tt.style.display = "block";
+  moveTooltip(event);
+}
+
+function moveTooltip(event) {
+  const tt = document.getElementById("tooltip");
+  const margin = 14;
+  let x = event.clientX + margin;
+  let y = event.clientY + margin;
+  if (x + tt.offsetWidth  > window.innerWidth)  x = event.clientX - tt.offsetWidth  - margin;
+  if (y + tt.offsetHeight > window.innerHeight) y = event.clientY - tt.offsetHeight - margin;
+  tt.style.left = x + "px";
+  tt.style.top  = y + "px";
+}
+
+function hideTooltip() {
+  document.getElementById("tooltip").style.display = "none";
+}
 
 function setStatus(msg, isError = false) {
   const el = document.getElementById("status");
@@ -343,6 +409,10 @@ function renderViz(center, comps) {
     .attr("preserveAspectRatio", "xMidYMid slice");
   centerNode.append("text").attr("class", "name-label").attr("y", centerR + 18).text(center.PLAYER_NAME);
   centerNode.append("text").attr("class", "team-label").attr("y", centerR + 32).text(center.TEAM_ABBREVIATION || "");
+  centerNode.on("mouseenter", function(event) {
+    const d = { ...(allPlayersMap[center.PLAYER_ID] || {}), ...center };
+    showTooltip(d, event);
+  }).on("mousemove", moveTooltip).on("mouseleave", hideTooltip);
 
   comps.forEach((comp, i) => {
     const angle = (2 * Math.PI * i) / comps.length - Math.PI / 2;
@@ -369,10 +439,13 @@ function renderViz(center, comps) {
       input.value = comp.PLAYER_NAME;
       fetchAndRender(comp.PLAYER_NAME);
     });
-    node.on("mouseenter", function() {
+    node.on("mouseenter", function(event) {
       d3.select(this).select(".ring").transition().duration(150).attr("opacity", 0.8);
-    }).on("mouseleave", function() {
+      const d = { ...(allPlayersMap[comp.PLAYER_ID] || {}), ...comp };
+      showTooltip(d, event);
+    }).on("mousemove", moveTooltip).on("mouseleave", function() {
       d3.select(this).select(".ring").transition().duration(150).attr("opacity", 0);
+      hideTooltip();
     });
   });
 
@@ -388,7 +461,8 @@ function renderStatsCard(center) {
     { key: "USG_PCT", label: "USG%" }, { key: "NET_RATING", label: "NET RTG" },
   ];
   fetch(`${API}/players`).then(r => r.json()).then(data => {
-    const player = data.players.find(p => p.PLAYER_ID === center.PLAYER_ID);
+    allPlayersMap = Object.fromEntries((data.players || []).map(p => [p.PLAYER_ID, p]));
+    const player = allPlayersMap[center.PLAYER_ID];
     if (!player) return;
     card.innerHTML = `
       <h2>Top comps for <span>${center.PLAYER_NAME}</span></h2>
