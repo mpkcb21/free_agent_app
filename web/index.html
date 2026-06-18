@@ -340,8 +340,7 @@ function renderViz(center, comps) {
     .attr("x", -centerR).attr("y", -centerR)
     .attr("width", centerR * 2).attr("height", centerR * 2)
     .attr("clip-path", "url(#clip-center)")
-    .attr("preserveAspectRatio", "xMidYMid slice")
-    .style("opacity", 0).transition().duration(500).style("opacity", 1);
+    .attr("preserveAspectRatio", "xMidYMid slice");
   centerNode.append("text").attr("class", "name-label").attr("y", centerR + 18).text(center.PLAYER_NAME);
   centerNode.append("text").attr("class", "team-label").attr("y", centerR + 32).text(center.TEAM_ABBREVIATION || "");
 
