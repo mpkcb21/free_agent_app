@@ -106,7 +106,7 @@ def find_similar_players(
     # Drop the query player themselves
     results = results[results.index != idx].head(n)
 
-    display_cols = ["PLAYER_NAME", "TEAM_ABBREVIATION", "AGE",
+    display_cols = ["PLAYER_ID", "PLAYER_NAME", "TEAM_ABBREVIATION", "AGE",
                     "PTS", "REB", "AST", "TS_PCT", "USG_PCT", "similarity_distance"]
     display_cols = [c for c in display_cols if c in results.columns]
 
