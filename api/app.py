@@ -16,8 +16,8 @@ Run locally:
     python api/app.py
 
 Test:
-    curl http://localhost:5000/players/search?q=luka
-    curl -X POST http://localhost:5000/comps \
+    curl http://localhost:8000/players/search?q=luka
+    curl -X POST http://localhost:8000/comps \
          -H "Content-Type: application/json" \
          -d '{"player": "Luka Doncic", "n": 5}'
 """
@@ -33,6 +33,7 @@ def normalize(s: str) -> str:
     """Strip accents and lowercase for fuzzy name matching."""
     return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode().lower()
 
+
 # Make sure model/ is on the path regardless of where the script is run from
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(ROOT, "model"))
@@ -44,6 +45,7 @@ import pandas as pd  # noqa: E402
 
 app = Flask(__name__)
 CORS(app)
+
 # ---------------------------------------------------------------------------
 # State — loaded once on startup
 # ---------------------------------------------------------------------------
@@ -71,6 +73,10 @@ def load_model():
 
     _scaler, _knn, _X_scaled, _valid_df, _feature_cols = build_model(_df)
     print(f"Model ready — {len(_valid_df)} players, {len(_feature_cols)} features")
+
+
+# Load model when module is imported (for gunicorn)
+load_model()
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +137,6 @@ def get_comps():
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
-    # Round floats for cleaner JSON
     comps = comps.round(3)
     return jsonify({
         "query": player,
@@ -163,6 +168,5 @@ def refresh():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    load_model()
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, port=port)
