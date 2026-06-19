@@ -1,0 +1,17 @@
+name: Refresh NBA Data
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping refresh endpoint
+        run: |
+          YEAR=$(date +%Y)
+          curl -X POST https://free-agent-app.onrender.com/refresh \
+               -H "Content-Type: application/json" \
+               -d "{\"season\": $YEAR}"
