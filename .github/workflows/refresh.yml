@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Ping refresh endpoint
         run: |
-          YEAR=$(date +%Y)
+          YEAR=$(($(date +%Y) - 1))
           curl -X POST https://free-agent-app.onrender.com/refresh \
                -H "Content-Type: application/json" \
                -d "{\"season\": $YEAR}"
